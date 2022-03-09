@@ -1,3 +1,5 @@
+# this vscode audio workaround is from https://github.com/microsoft/vscode-jupyter/issues/1012#issuecomment-785410064
+
 import IPython.display
 import numpy as np
 import json
