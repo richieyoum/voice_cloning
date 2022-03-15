@@ -1,0 +1,6 @@
+[submodule "tacotron2"]
+	path = tacotron2
+	url = https://github.com/NVIDIA/tacotron2
+[submodule "tacotron2/waveglow"]
+	path = tacotron2/waveglow
+	url = https://github.com/NVIDIA/waveglow
