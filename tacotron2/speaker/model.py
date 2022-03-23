@@ -11,26 +11,18 @@ class SpeakerEncoder(nn.Module):
         super().__init__()
         self.loss_device = loss_device
 
-        # initial lstm takes 40 channel log-mel spectrograms, projected to 256 dimensions
-        self.lstm1 = nn.LSTM(
+        # lstm block consisting of 3 layers
+        # takes input 40 channel log-mel spectrograms, projected to 256 dimensions
+        self.lstm = nn.LSTM(
             input_size=40,
             hidden_size=256,
-            num_layers=1,
+            num_layers=3,
             batch_first=True,
             dropout=0,
             bidirectional=False,
             proj_size=256
         ).to(device)
-        # other two lstms
-        self.lstm2_3 = nn.LSTM(
-            input_size=256,
-            hidden_size=256,
-            num_layers=2,
-            batch_first=True,
-            dropout=0,
-            bidirectional=False,
-            proj_size=256
-        ).to(device)
+
         self.linear = nn.Linear(in_features=256, out_features=256).to(device)
         self.relu = nn.ReLU().to(device)
         # epsilon term for numerical stability ( ie - division by 0)
@@ -38,8 +30,7 @@ class SpeakerEncoder(nn.Module):
 
     def forward(self, utterances, h_init=None, c_init=None):
         # implement section 2.1 from https://arxiv.org/pdf/1806.04558.pdf
-        out, (hidden, cell) = self.lstm1(utterances, (h_init, c_init))
-        out, (hidden, cell) = self.lstm2_3(out, (hidden, cell))
+        out, (hidden, cell) = self.lstm(utterances, (h_init, c_init))
 
         # compute speaker embedding from hidden state of final layer
         final_hidden = hidden[-1]
