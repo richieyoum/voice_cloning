@@ -117,4 +117,23 @@ class SpeakerEncoder(nn.Module):
         return sim_matrix
 
     def loss(self, embeds):
-        pass
+        """
+        computes softmax loss as defined by equ 6 in the GE2E paper
+        :param embeds: shape (speakers, utterances, embedding size)
+        :return: computed softmax loss
+        """
+        # per the GE2E paper, softmax loss as defined by equ 6
+        # performs slightly better over Text-Independent Speaker
+        # Verification tasks.
+        # ref section 2.1 of the GE2E paper
+        speaker_count = embeds.shape[0]
+
+        # speaker, utterance, speaker
+        similarities = self.similarity_matrix(embeds)
+
+        # equ 6
+        loss_matrix = -similarities[torch.arange(0, speaker_count), :, torch.arange(0, speaker_count)] + \
+                      torch.log(torch.sum(torch.exp(similarities), dim=2))
+
+        # equ 10
+        return torch.sum(loss_matrix)
