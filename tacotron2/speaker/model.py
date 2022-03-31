@@ -116,5 +116,54 @@ class SpeakerEncoder(nn.Module):
         sim_matrix = sim_matrix * self.sim_weight + self.sim_bias
         return sim_matrix
 
-    def loss(self, embeds):
-        pass
+    def softmax_loss(self, embeds):
+        """
+        computes softmax loss as defined by equ 6 in the GE2E paper
+        :param embeds: shape (speakers, utterances, embedding size)
+        :return: computed softmax loss
+        """
+        # per the GE2E paper, softmax loss as defined by equ 6
+        # performs slightly better over Text-Independent Speaker
+        # Verification tasks.
+        # ref section 2.1 of the GE2E paper
+        speaker_count = embeds.shape[0]
+
+        # speaker, utterance, speaker
+        similarities = self.similarity_matrix(embeds)
+
+        # equ 6
+        loss_matrix = -similarities[torch.arange(0, speaker_count), :, torch.arange(0, speaker_count)] + \
+                      torch.log(torch.sum(torch.exp(similarities), dim=2))
+
+        # equ 10
+        return torch.sum(loss_matrix)
+
+    def contrast_loss(self, embeds):
+        """
+        computes contrast loss as defined by equ 7 in the GE2E paper
+        :param embeds: shape (speakers, utterances, embedding size)
+        :return: computed softmax loss
+        """
+        # per the GE2E paper, contrast loss as defined by equ 7
+        # performs slightly better over Text-Dependent Speaker
+        # Verification tasks.
+        # ref section 2.1 of the GE2E paper
+        speaker_count, utterance_count = embeds.shape[0:2]
+
+        # speaker, utterance, speaker
+        similarities = self.similarity_matrix(embeds)
+
+        # Janky indexing to resolve k != j
+        mask = torch.ones(similarities.shape, dtype=torch.bool)
+        mask[torch.arange(speaker_count), :, torch.arange(speaker_count)] = False
+        closest_neighbors, _ = torch.max(similarities[mask].reshape(speaker_count, utterance_count, speaker_count - 1), dim=2)
+
+        # Positive influence over matching embeddings
+        matching_embedding = similarities[torch.arange(0, speaker_count), :, torch.arange(0, speaker_count)]
+
+        # equ 7
+        loss_matrix = 1 - torch.sigmoid(matching_embedding) + torch.sigmoid(closest_neighbors)
+
+        # equ 10
+        return torch.sum(loss_matrix)
+
