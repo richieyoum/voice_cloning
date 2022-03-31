@@ -1,3 +1,6 @@
 .ipynb_checkpoints/
 out/
 __pycache__/
+
+LibriSpeech/
+train-clean-100.tar.gz
