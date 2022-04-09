@@ -3,39 +3,45 @@
 import torch
 import torchaudio.datasets as datasets
 import torchaudio.transforms as transforms
+from speaker.data import SpeakerMelLoader
+from speaker.model import SpeakerEncoder
 
-
-class SpeakerMelLoader(torch.utils.data.Dataset):
-    """
-    computes mel-spectrograms from audio file and pulls the speaker ID from the
-    dataset
-    """
-
-    def __init__(self, dataset):
-        self.dataset = dataset
-
-    def get_mel(self, waveform, sampling_rate):
-        audio = waveform.unsqueeze(0)
-        audio = torch.autograd.Variable(audio, requires_grad=False)
-        melspec = transforms.MFCC(sample_rate=sampling_rate)(audio)
-        melspec = torch.squeeze(melspec, 0)
-        return melspec
-
-    def __getitem__(self, index):
-        (waveform, sample_rate, _, speaker_id, _, _) = self.dataset[index]
-        mel = self.get_mel(waveform, sample_rate)
-        return (speaker_id, mel)
-
-    def __len__(self):
-        return len(self. dataset)
-
-def load_data(directory=".", batch_size=1):
-    loader = SpeakerMelLoader(datasets.LIBRISPEECH(".", download=True))
+def load_data(directory=".", batch_size=2, format='speaker', utter_per_speaker = 4):
+    loader = SpeakerMelLoader(datasets.LIBRISPEECH(directory, download=True), format, utter_per_speaker)
     return torch.utils.data.DataLoader(
         loader,
         batch_size,
-        num_workers=32,
+        num_workers=8,
     )
+
+def train(speaker_per_batch=4, utter_per_speaker=4, learning_rate=1e-4):
+    # Init data loader
+    loader = load_data(".")
+
+    # Device
+    # Loss calc may run faster on cpu
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    loss_device = torch.device("cpu")
+
+    # Init model
+    model = SpeakerEncoder(device, loss_device)
+    optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+
+    # Train loop
+    for step, batch in enumerate(loader):
+        embeds = model(inputs)
+
+        #Forward
+        embeds_for_loss = embeds.view((speaker_per_batch,utter_per_speaker,-1)).to(loss_device)
+        loss = model.loss(embeds_for_loss)
+
+        #Backward
+        model.zero_grad()
+        loss.backward()
+        optimizer.step()
+    
+    return model
+
 
 if __name__ == '__main__':
     for speaker_id, mel in load_data():
