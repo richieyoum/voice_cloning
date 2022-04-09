@@ -20,8 +20,7 @@ class SpeakerEncoder(nn.Module):
             num_layers=3,
             batch_first=True,
             dropout=0,
-            bidirectional=False,
-            proj_size=256
+            bidirectional=False
         ).to(device)
 
         self.linear = nn.Linear(in_features=256, out_features=256).to(device)
@@ -35,7 +34,10 @@ class SpeakerEncoder(nn.Module):
 
     def forward(self, utterances, h_init=None, c_init=None):
         # implement section 2.1 from https://arxiv.org/pdf/1806.04558.pdf
-        out, (hidden, cell) = self.lstm(utterances, (h_init, c_init))
+        if h_init is None or c_init is None:
+            out, (hidden, cell) = self.lstm(utterances)
+        else:
+            out, (hidden, cell) = self.lstm(utterances, (h_init, c_init))
 
         # compute speaker embedding from hidden state of final layer
         final_hidden = hidden[-1]
