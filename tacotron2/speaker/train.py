@@ -6,12 +6,12 @@ import torchaudio.transforms as transforms
 from speaker.data import SpeakerMelLoader
 from speaker.model import SpeakerEncoder
 
-def load_data(directory=".", batch_size=2, format='speaker', utter_per_speaker = 4):
-    loader = SpeakerMelLoader(datasets.LIBRISPEECH(directory, download=True), format, utter_per_speaker)
+def load_data(directory=".", batch_size=4, format='speaker', utter_per_speaker = 4):
+    dataset = SpeakerMelLoader(datasets.LIBRISPEECH(directory, download=True), format, utter_per_speaker)
     return torch.utils.data.DataLoader(
-        loader,
+        dataset,
         batch_size,
-        num_workers=1,
+        num_workers=4,
         shuffle=True
     )
 
@@ -55,8 +55,58 @@ def train(speaker_per_batch=4, utter_per_speaker=4, epochs=2, learning_rate=1e-4
     
     return model
 
+def save_model(model, path):
+    #Save model state to path
+    torch.save(model.state_dict(),path)
+
+
+def load_model(path, device = None):
+    #Instantiate Model
+    if device is None:
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    loss_device = torch.device("cpu")
+    model = SpeakerEncoder(device, loss_device)
+
+    #Load model state
+    model.load_state_dict(torch.load(path))
+    # Try this if running on multi-gpu setup or running model on cpu
+    # https://pytorch.org/tutorials/beginner/saving_loading_models.html#saving-loading-model-across-devices
+    # model.load_state_dict(torch.load(PATH, map_location=device))
+    return model
+
+def check_model(path):
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    loss_device = torch.device("cpu")
+
+    print('**loading model')
+    model = load_model(path)
+
+    print('**loading data')
+    data = load_data()
+    for batch in data:
+        speaker_id, inputs = batch
+
+        print('**running model')
+        embed_inputs = inputs.reshape(-1, *(inputs.shape[2:])).to(device)
+        embeds = model(embed_inputs)
+        loss_embeds = embeds.view(*(inputs.shape[:2]),-1).to(loss_device)
+        loss = model.softmax_loss(loss_embeds)
+        
+        print('inputs.shape',inputs.shape)
+        print('embed_inputs.embed_inputs',embeds.shape)
+        print('embeds.shape',embeds.shape)
+        print('loss_embeds.shape',loss_embeds.shape)
+        print('loss.shape',loss.shape)
+        print('loss',loss)
+        
+        break
+
 
 if __name__ == '__main__':
     # for speaker_id, mel in load_data():
     #     print(speaker_id, mel.shape)
-    train()
+    
+    # m = train(epochs=10)
+    # save_model(m,'speaker/saved_model.pt')
+
+    check_model('speaker/saved_model.pt')

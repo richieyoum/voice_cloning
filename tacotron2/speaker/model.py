@@ -47,9 +47,9 @@ class SpeakerEncoder(nn.Module):
         speaker_embedding = speaker_embedding / (torch.norm(speaker_embedding, dim=1, keepdim=True) + self.epsilon)
         return speaker_embedding
 
-    def gradient_clipping():
-        self.similarity_weight.grad *= 0.01
-        self.similarity_bias.grad *= 0.01
+    def gradient_clipping(self):
+        self.sim_weight.grad *= 0.01
+        self.sim_bias.grad *= 0.01
 
         #Pytorch to clip gradients if norm greater than max
         clip_grad_norm_(self.parameters(),max_norm=3,norm_type=2)
