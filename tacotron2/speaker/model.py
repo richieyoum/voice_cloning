@@ -111,8 +111,8 @@ class SpeakerEncoder(nn.Module):
         if debug:
             print("sm",sim_matrix.shape)
             print(sim_matrix)
-            print("cos sim weight", sim_weight)
-            print("cos sim bias", sim_bias)
+            print("cos sim weight", self.sim_weight)
+            print("cos sim bias", self.sim_bias)
 
         # Apply weight / bias
         sim_matrix = sim_matrix * self.sim_weight + self.sim_bias
