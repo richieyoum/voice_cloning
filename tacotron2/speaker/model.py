@@ -169,3 +169,25 @@ class SpeakerEncoder(nn.Module):
         # equ 10
         return torch.sum(loss_matrix)
 
+    def accuracy(self, embeds):
+        """
+        computes argmax accuracy
+        :param embeds: shape (speakers, utterances, speakers)
+        :return: accuracy
+        """
+        num_speaker, num_utter = embeds.shape[:2]
+
+        similarities = self.similarity_matrix(embeds)
+        preds = torch.argmax(similarities, dim=2)
+        preds_one_hot = torch.nn.functional.one_hot(preds,num_classes = num_speaker)
+
+        actual = torch.arange(num_speaker).unsqueeze(1).repeat(1,num_utter)
+        actual_one_hot = torch.nn.functional.one_hot(actual,num_classes=num_speaker)
+
+        return torch.sum(preds_one_hot * actual_one_hot)/(num_speaker*num_utter)
+
+
+
+
+
+

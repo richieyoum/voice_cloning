@@ -15,9 +15,19 @@ def load_data(directory=".", batch_size=4, format='speaker', utter_per_speaker =
         shuffle=True
     )
 
+def load_validation(directory=".", batch_size=4, format='speaker', utter_per_speaker = 4):
+    dataset = SpeakerMelLoader(datasets.LIBRISPEECH(directory, "dev-clean",download=True), format, utter_per_speaker)
+    return torch.utils.data.DataLoader(
+        dataset,
+        batch_size,
+        num_workers=4,
+        shuffle=True
+    )
+
 def train(speaker_per_batch=4, utter_per_speaker=4, epochs=2, learning_rate=1e-4):
     # Init data loader
-    loader = load_data(".", speaker_per_batch, 'speaker', utter_per_speaker)
+    train_loader = load_data(".", speaker_per_batch, 'speaker', utter_per_speaker)
+    valid_loader = load_validation(".", speaker_per_batch, 'speaker', utter_per_speaker)
 
     # Device
     # Loss calc may run faster on cpu
@@ -31,8 +41,9 @@ def train(speaker_per_batch=4, utter_per_speaker=4, epochs=2, learning_rate=1e-4
     # Train loop
     for e in range(epochs):
         print('epoch:',e+1,'of',epochs)
-        for step, batch in enumerate(loader):
 
+        model.train() 
+        for step, batch in enumerate(train_loader):
             #Forward
             #inputs: (speaker, utter, mel_len, mel_channel)
             speaker_id, inputs = batch
@@ -52,7 +63,22 @@ def train(speaker_per_batch=4, utter_per_speaker=4, epochs=2, learning_rate=1e-4
             loss.backward()
             model.gradient_clipping()
             optimizer.step()
-    
+        
+        model.eval()
+        loss = 0
+        acc = 0
+        for step,batch in enumerate(valid_loader):
+            with torch.no_grad():
+                speaker_id, inputs = batch
+                embed_inputs = inputs.reshape(-1, *(inputs.shape[2:])).to(device)
+                embeds = model(embed_inputs)
+                loss_embeds = embeds.view((speaker_per_batch,utter_per_speaker,-1)).to(loss_device)
+                loss += model.softmax_loss(loss_embeds)
+                acc += model.accuracy(loss_embeds)
+
+        print('valid e{}'.format(e), 'loss', loss/(step+1))
+        print('valid e{}'.format(e), 'accuracy', acc/(step+1))
+        
     return model
 
 def save_model(model, path):
@@ -82,24 +108,36 @@ def check_model(path):
     model = load_model(path)
 
     print('**loading data')
-    data = load_data()
-    for batch in data:
+    # data = load_data()
+    data = load_validation()
+
+    print('**running model')
+    loss_total = 0
+    acc_total = 0
+
+    for step, batch in enumerate(data):
         speaker_id, inputs = batch
 
-        print('**running model')
+        print('batch:', step)
         embed_inputs = inputs.reshape(-1, *(inputs.shape[2:])).to(device)
         embeds = model(embed_inputs)
         loss_embeds = embeds.view(*(inputs.shape[:2]),-1).to(loss_device)
         loss = model.softmax_loss(loss_embeds)
+        accuracy = model.accuracy(loss_embeds)
+
+        loss_total += loss
+        acc_total += accuracy
         
-        print('inputs.shape',inputs.shape)
-        print('embed_inputs.embed_inputs',embeds.shape)
-        print('embeds.shape',embeds.shape)
-        print('loss_embeds.shape',loss_embeds.shape)
-        print('loss.shape',loss.shape)
-        print('loss',loss)
-        
-        break
+        # print('inputs.shape',inputs.shape)
+        # print('embed_inputs.embed_inputs',embeds.shape)
+        # print('embeds.shape',embeds.shape)
+        # print('loss_embeds.shape',loss_embeds.shape)
+        # print('loss.shape',loss.shape)
+        # print('loss',loss)
+        # print('accuracy',accuracy)
+    
+    print('average loss', loss_total / (step+1))
+    print('average accuracy', acc_total / (step+1))
 
 
 if __name__ == '__main__':
