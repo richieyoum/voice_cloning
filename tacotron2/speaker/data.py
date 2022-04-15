@@ -10,7 +10,7 @@ class SpeakerMelLoader(torch.utils.data.Dataset):
     dataset
     """
 
-    def __init__(self, dataset, format='speaker', speaker_utterances=4, mel_length = 160):
+    def __init__(self, dataset, format='speaker', speaker_utterances=4, mel_length = 100):
         self.dataset = dataset
         self.set_format(format)
         self.speaker_utterances = speaker_utterances
@@ -36,7 +36,9 @@ class SpeakerMelLoader(torch.utils.data.Dataset):
         audio = waveform.unsqueeze(0)
         audio = torch.autograd.Variable(audio, requires_grad=False)
         melspec = transforms.MFCC(sample_rate=sampling_rate)(audio)
-        melspec = torch.squeeze(melspec, 0)
+        # melspec is (1,1,channels, time) by default
+        # return (time, channels)
+        melspec = torch.squeeze(melspec).T
         return melspec
 
     def __getitem__(self, index):
@@ -51,9 +53,9 @@ class SpeakerMelLoader(torch.utils.data.Dataset):
             for i in utter_indexes:
                 (waveform, sample_rate, _, speaker_id, _, _) = self.dataset[i]
                 mel = self.get_mel(waveform, sample_rate)
-                mel_frame = random.randint(0,mel.shape[2]-self.mel_length)
-                mels.append(mel[:,:,mel_frame:mel_frame+self.mel_length])
-            return (speaker_id, torch.cat(mels,0))
+                mel_frame = random.randint(0,mel.shape[0]-self.mel_length)
+                mels.append(mel[mel_frame:mel_frame+self.mel_length,:])
+            return (speaker_id, torch.stack(mels,0))
         else:
             raise NotImplementedError()
 

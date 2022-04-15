@@ -20,8 +20,7 @@ class SpeakerEncoder(nn.Module):
             num_layers=3,
             batch_first=True,
             dropout=0,
-            bidirectional=False,
-            proj_size=256
+            bidirectional=False
         ).to(device)
 
         self.linear = nn.Linear(in_features=256, out_features=256).to(device)
@@ -35,7 +34,10 @@ class SpeakerEncoder(nn.Module):
 
     def forward(self, utterances, h_init=None, c_init=None):
         # implement section 2.1 from https://arxiv.org/pdf/1806.04558.pdf
-        out, (hidden, cell) = self.lstm(utterances, (h_init, c_init))
+        if h_init is None or c_init is None:
+            out, (hidden, cell) = self.lstm(utterances)
+        else:
+            out, (hidden, cell) = self.lstm(utterances, (h_init, c_init))
 
         # compute speaker embedding from hidden state of final layer
         final_hidden = hidden[-1]
@@ -45,9 +47,9 @@ class SpeakerEncoder(nn.Module):
         speaker_embedding = speaker_embedding / (torch.norm(speaker_embedding, dim=1, keepdim=True) + self.epsilon)
         return speaker_embedding
 
-    def gradient_clipping():
-        self.similarity_weight.grad *= 0.01
-        self.similarity_bias.grad *= 0.01
+    def gradient_clipping(self):
+        self.sim_weight.grad *= 0.01
+        self.sim_bias.grad *= 0.01
 
         #Pytorch to clip gradients if norm greater than max
         clip_grad_norm_(self.parameters(),max_norm=3,norm_type=2)
@@ -109,8 +111,8 @@ class SpeakerEncoder(nn.Module):
         if debug:
             print("sm",sim_matrix.shape)
             print(sim_matrix)
-            print("cos sim weight", sim_weight)
-            print("cos sim bias", sim_bias)
+            print("cos sim weight", self.sim_weight)
+            print("cos sim bias", self.sim_bias)
 
         # Apply weight / bias
         sim_matrix = sim_matrix * self.sim_weight + self.sim_bias
@@ -166,4 +168,26 @@ class SpeakerEncoder(nn.Module):
 
         # equ 10
         return torch.sum(loss_matrix)
+
+    def accuracy(self, embeds):
+        """
+        computes argmax accuracy
+        :param embeds: shape (speakers, utterances, speakers)
+        :return: accuracy
+        """
+        num_speaker, num_utter = embeds.shape[:2]
+
+        similarities = self.similarity_matrix(embeds)
+        preds = torch.argmax(similarities, dim=2)
+        preds_one_hot = torch.nn.functional.one_hot(preds,num_classes = num_speaker)
+
+        actual = torch.arange(num_speaker).unsqueeze(1).repeat(1,num_utter)
+        actual_one_hot = torch.nn.functional.one_hot(actual,num_classes=num_speaker)
+
+        return torch.sum(preds_one_hot * actual_one_hot)/(num_speaker*num_utter)
+
+
+
+
+
 
