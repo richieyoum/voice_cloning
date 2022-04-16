@@ -218,12 +218,11 @@ def plot_embeddings(embeddings, ids, filename, title='T-SNE Plot'):
     # reducing dimensionality before running TSNE
     pca = PCA(50)
     reduction = pca.fit_transform(embeddings)
-    tsne = TSNE(init='pca')
+    tsne = TSNE(init='pca', learning_rate='auto')
     transformed = tsne.fit_transform(reduction)
     plt.figure()
     plt.title(title)
     plt.scatter(transformed[:, 0], transformed[:, 1], c=ids)
-    plt.legend()
     # plt.show()
     plt.savefig(path.join(diagram_path, filename))
     plt.close()

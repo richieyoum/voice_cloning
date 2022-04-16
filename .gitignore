@@ -4,3 +4,4 @@ __pycache__/
 
 LibriSpeech/
 train-clean-100.tar.gz
+dev-clean.tar.gz

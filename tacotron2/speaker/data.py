@@ -4,6 +4,8 @@ import torchaudio.transforms as transforms
 from collections import defaultdict
 import random
 
+import warnings
+
 class SpeakerMelLoader(torch.utils.data.Dataset):
     """
     computes mel-spectrograms from audio file and pulls the speaker ID from the
@@ -33,13 +35,16 @@ class SpeakerMelLoader(torch.utils.data.Dataset):
         self.speaker_keys = list(speaker_map.keys())
 
     def get_mel(self, waveform, sampling_rate):
-        audio = waveform.unsqueeze(0)
-        audio = torch.autograd.Variable(audio, requires_grad=False)
-        melspec = transforms.MFCC(sample_rate=sampling_rate)(audio)
-        # melspec is (1,1,channels, time) by default
-        # return (time, channels)
-        melspec = torch.squeeze(melspec).T
-        return melspec
+        # We previously identified that these warnings were ok.
+        with warnings.catch_warnings():
+            warnings.filterwarnings('ignore', message=r'At least one mel filterbank has all zero values.*', module=r'torchaudio.*')
+            audio = waveform.unsqueeze(0)
+            audio = torch.autograd.Variable(audio, requires_grad=False)
+            melspec = transforms.MFCC(sample_rate=sampling_rate)(audio)
+            # melspec is (1,1,channels, time) by default
+            # return (time, channels)
+            melspec = torch.squeeze(melspec).T
+            return melspec
 
     def __getitem__(self, index):
         if self.format == 'utterance':
