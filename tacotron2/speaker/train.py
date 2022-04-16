@@ -6,6 +6,15 @@ import torchaudio.transforms as transforms
 from speaker.data import SpeakerMelLoader
 from speaker.model import SpeakerEncoder
 
+from sklearn.manifold import TSNE
+from sklearn.decomposition import PCA
+from sklearn.metrics import silhouette_score
+
+from matplotlib import pyplot as plt
+
+import numpy as np
+
+
 def load_data(directory=".", batch_size=4, format='speaker', utter_per_speaker = 4):
     dataset = SpeakerMelLoader(datasets.LIBRISPEECH(directory, download=True), format, utter_per_speaker)
     return torch.utils.data.DataLoader(
@@ -15,6 +24,7 @@ def load_data(directory=".", batch_size=4, format='speaker', utter_per_speaker =
         shuffle=True
     )
 
+
 def load_validation(directory=".", batch_size=4, format='speaker', utter_per_speaker = 4):
     dataset = SpeakerMelLoader(datasets.LIBRISPEECH(directory, "dev-clean",download=True), format, utter_per_speaker)
     return torch.utils.data.DataLoader(
@@ -23,6 +33,7 @@ def load_validation(directory=".", batch_size=4, format='speaker', utter_per_spe
         num_workers=4,
         shuffle=True
     )
+
 
 def train(speaker_per_batch=4, utter_per_speaker=4, epochs=2, learning_rate=1e-4):
     # Init data loader
@@ -42,7 +53,9 @@ def train(speaker_per_batch=4, utter_per_speaker=4, epochs=2, learning_rate=1e-4
     for e in range(epochs):
         print('epoch:',e+1,'of',epochs)
 
-        model.train() 
+        model.train()
+        # train_ids = np.zeros(0)
+        # train_embeds = np.zeros((0, 256))
         for step, batch in enumerate(train_loader):
             #Forward
             #inputs: (speaker, utter, mel_len, mel_channel)
@@ -56,17 +69,24 @@ def train(speaker_per_batch=4, utter_per_speaker=4, epochs=2, learning_rate=1e-4
             loss = model.softmax_loss(loss_embeds)
 
             if step % 10 == 0:
-                print('train e{}-s{}:'.format(e,step),'loss',loss)
+                print('train e{}-s{}:'.format(e + 1,step + 1),'loss',loss)
 
             #Backward
             model.zero_grad()
             loss.backward()
             model.gradient_clipping()
             optimizer.step()
+
+            # train_ids = np.concatenate((train_ids, np.repeat(speaker_id, inputs.shape[1])))
+            # train_embeds = np.concatenate((train_embeds, embeds))
         
         model.eval()
         loss = 0
         acc = 0
+
+        valid_ids = np.zeros(0)
+        valid_embeds = np.zeros((0, 256))
+
         for step,batch in enumerate(valid_loader):
             with torch.no_grad():
                 speaker_id, inputs = batch
@@ -75,11 +95,17 @@ def train(speaker_per_batch=4, utter_per_speaker=4, epochs=2, learning_rate=1e-4
                 loss_embeds = embeds.view((speaker_per_batch,utter_per_speaker,-1)).to(loss_device)
                 loss += model.softmax_loss(loss_embeds)
                 acc += model.accuracy(loss_embeds)
+                valid_ids = np.concatenate((valid_ids, np.repeat(speaker_id, inputs.shape[1])))
+                valid_embeds = np.concatenate((valid_embeds, embeds.to(loss_device).detach()))
 
-        print('valid e{}'.format(e), 'loss', loss/(step+1))
-        print('valid e{}'.format(e), 'accuracy', acc/(step+1))
+        print('valid e{}'.format(e + 1), 'loss', loss/(step+1))
+        print('valid e{}'.format(e + 1), 'accuracy', acc/(step+1))
+        print('silhouette score', silhouette_score(valid_embeds, valid_ids))
+
+        plot_embeddings(valid_embeds, valid_ids, f'T-SNE Plot: Epoch {e + 1}')
         
     return model
+
 
 def save_model(model, path):
     #Save model state to path
@@ -100,6 +126,7 @@ def load_model(path, device = None):
     # model.load_state_dict(torch.load(PATH, map_location=device))
     return model
 
+
 def check_model(path):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     loss_device = torch.device("cpu")
@@ -114,6 +141,8 @@ def check_model(path):
     print('**running model')
     loss_total = 0
     acc_total = 0
+    all_ids = np.zeros(0)
+    all_embeds = np.zeros((0, 256))
 
     for step, batch in enumerate(data):
         speaker_id, inputs = batch
@@ -124,6 +153,9 @@ def check_model(path):
         loss_embeds = embeds.view(*(inputs.shape[:2]),-1).to(loss_device)
         loss = model.softmax_loss(loss_embeds)
         accuracy = model.accuracy(loss_embeds)
+
+        all_ids = np.concatenate((all_ids, np.repeat(speaker_id, inputs.shape[1])))
+        all_embeds = np.concatenate((all_embeds, embeds.to(loss_device).detach()))
 
         loss_total += loss
         acc_total += accuracy
@@ -138,6 +170,23 @@ def check_model(path):
     
     print('average loss', loss_total / (step+1))
     print('average accuracy', acc_total / (step+1))
+    print('silhouette score', silhouette_score(all_embeds, all_ids))
+    plot_embeddings(all_embeds, all_ids)
+
+
+def plot_embeddings(embeddings, ids, title='T-SNE Plot'):
+    # Per https://scikit-learn.org/stable/modules/generated/sklearn.manifold.TSNE.html
+    # reducing dimensionality before running TSNE
+    pca = PCA(50)
+    reduction = pca.fit_transform(embeddings)
+    tsne = TSNE(init='pca')
+    transformed = tsne.fit_transform(reduction)
+    plt.figure()
+    plt.title(title)
+    plt.scatter(transformed[:, 0], transformed[:, 1], c=ids)
+    plt.legend()
+    plt.show()
+    plt.close()
 
 
 if __name__ == '__main__':
