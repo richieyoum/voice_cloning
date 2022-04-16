@@ -5,6 +5,7 @@ import torchaudio.datasets as datasets
 import torchaudio.transforms as transforms
 from speaker.data import SpeakerMelLoader
 from speaker.model import SpeakerEncoder
+from speaker.utils import get_mapping_array
 
 from sklearn.manifold import TSNE
 from sklearn.decomposition import PCA
@@ -55,8 +56,11 @@ def train(speaker_per_batch=4, utter_per_speaker=4, epochs=2, learning_rate=1e-4
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 
     sil_scores = np.zeros(0)
+    gender_scores = np.zeros(0)
     val_losses = np.zeros(0)
     val_accuracy = np.zeros(0)
+
+    gender_mapper = get_mapping_array()
 
     # Train loop
     for e in range(epochs):
@@ -110,9 +114,11 @@ def train(speaker_per_batch=4, utter_per_speaker=4, epochs=2, learning_rate=1e-4
         val_losses = np.concatenate((val_losses, [loss.to(loss_device).detach() / (step + 1)]))
         val_accuracy = np.concatenate((val_accuracy, [acc.to(loss_device).detach() / (step + 1)]))
         sil_scores = np.concatenate((sil_scores, [silhouette_score(valid_embeds, valid_ids)]))
+        gender_scores = np.concatenate((gender_scores, [silhouette_score(valid_embeds, gender_mapper[valid_ids.astype('int')])]))
         print('valid e{}'.format(e + 1), 'loss', val_losses[-1])
         print('valid e{}'.format(e + 1), 'accuracy', val_accuracy[-1])
         print('silhouette score', sil_scores[-1])
+        print('gender silhouette score', gender_scores[-1])
 
         plot_embeddings(valid_embeds, valid_ids, f'tsne_e{e + 1}.png', f'T-SNE Plot: Epoch {e + 1}')
 
@@ -123,6 +129,15 @@ def train(speaker_per_batch=4, utter_per_speaker=4, epochs=2, learning_rate=1e-4
     plt.plot(np.arange(epochs) + 1, sil_scores)
     # plt.show()
     plt.savefig(path.join(diagram_path, "sil_scores.png"))
+    plt.close()
+
+    plt.figure()
+    plt.title('Silhouette Scores over Gender')
+    plt.xlabel('Epoch')
+    plt.ylabel('Silhouette Score')
+    plt.plot(np.arange(epochs) + 1, gender_scores)
+    # plt.show()
+    plt.savefig(path.join(diagram_path, "gender_scores.png"))
     plt.close()
 
     plt.figure()
@@ -220,9 +235,19 @@ def plot_embeddings(embeddings, ids, filename, title='T-SNE Plot'):
     reduction = pca.fit_transform(embeddings)
     tsne = TSNE(init='pca', learning_rate='auto')
     transformed = tsne.fit_transform(reduction)
+
+    gender_mapper = get_mapping_array()
+    genders = gender_mapper[ids.astype('int')]
+    females = genders == 1
+    males = genders == 2
+
     plt.figure()
     plt.title(title)
-    plt.scatter(transformed[:, 0], transformed[:, 1], c=ids)
+
+    plt.scatter(transformed[females, 0], transformed[females, 1], label='Female')
+    plt.scatter(transformed[males, 0], transformed[males, 1], label='Male')
+    plt.legend()
+    plt.grid()
     # plt.show()
     plt.savefig(path.join(diagram_path, filename))
     plt.close()
