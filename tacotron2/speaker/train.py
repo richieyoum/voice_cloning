@@ -12,7 +12,12 @@ from sklearn.metrics import silhouette_score
 
 from matplotlib import pyplot as plt
 
+import os
+from os import path
+
 import numpy as np
+
+diagram_path = 'diagrams'
 
 
 def load_data(directory=".", batch_size=4, format='speaker', utter_per_speaker = 4):
@@ -49,9 +54,13 @@ def train(speaker_per_batch=4, utter_per_speaker=4, epochs=2, learning_rate=1e-4
     model = SpeakerEncoder(device, loss_device)
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 
+    sil_scores = np.zeros(0)
+    val_losses = np.zeros(0)
+    val_accuracy = np.zeros(0)
+
     # Train loop
     for e in range(epochs):
-        print('epoch:',e+1,'of',epochs)
+        print('epoch:', e+1, 'of', epochs)
 
         model.train()
         # train_ids = np.zeros(0)
@@ -69,7 +78,7 @@ def train(speaker_per_batch=4, utter_per_speaker=4, epochs=2, learning_rate=1e-4
             loss = model.softmax_loss(loss_embeds)
 
             if step % 10 == 0:
-                print('train e{}-s{}:'.format(e + 1,step + 1),'loss',loss)
+                print('train e{}-s{}:'.format(e + 1, step + 1), 'loss', loss)
 
             #Backward
             model.zero_grad()
@@ -98,11 +107,41 @@ def train(speaker_per_batch=4, utter_per_speaker=4, epochs=2, learning_rate=1e-4
                 valid_ids = np.concatenate((valid_ids, np.repeat(speaker_id, inputs.shape[1])))
                 valid_embeds = np.concatenate((valid_embeds, embeds.to(loss_device).detach()))
 
-        print('valid e{}'.format(e + 1), 'loss', loss/(step+1))
-        print('valid e{}'.format(e + 1), 'accuracy', acc/(step+1))
-        print('silhouette score', silhouette_score(valid_embeds, valid_ids))
+        val_losses = np.concatenate((val_losses, [loss.to(loss_device).detach() / (step + 1)]))
+        val_accuracy = np.concatenate((val_accuracy, [acc.to(loss_device).detach() / (step + 1)]))
+        sil_scores = np.concatenate((sil_scores, [silhouette_score(valid_embeds, valid_ids)]))
+        print('valid e{}'.format(e + 1), 'loss', val_losses[-1])
+        print('valid e{}'.format(e + 1), 'accuracy', val_accuracy[-1])
+        print('silhouette score', sil_scores[-1])
 
-        plot_embeddings(valid_embeds, valid_ids, f'T-SNE Plot: Epoch {e + 1}')
+        plot_embeddings(valid_embeds, valid_ids, f'tsne_e{e + 1}.png', f'T-SNE Plot: Epoch {e + 1}')
+
+    plt.figure()
+    plt.title('Silhouette Scores')
+    plt.xlabel('Epoch')
+    plt.ylabel('Silhouette Score')
+    plt.plot(np.arange(epochs) + 1, sil_scores)
+    # plt.show()
+    plt.savefig(path.join(diagram_path, "sil_scores.png"))
+    plt.close()
+
+    plt.figure()
+    plt.title('Validation Loss')
+    plt.xlabel('Epoch')
+    plt.ylabel('Loss')
+    plt.plot(np.arange(epochs) + 1, val_losses)
+    # plt.show()
+    plt.savefig(path.join(diagram_path, "val_losses.png"))
+    plt.close()
+
+    plt.figure()
+    plt.title('Validation Accuracy')
+    plt.xlabel('Epoch')
+    plt.ylabel('Accuracy')
+    plt.plot(np.arange(epochs) + 1, val_accuracy)
+    # plt.show()
+    plt.savefig(path.join(diagram_path, "val_accuracy.png"))
+    plt.close()
         
     return model
 
@@ -171,10 +210,10 @@ def check_model(path):
     print('average loss', loss_total / (step+1))
     print('average accuracy', acc_total / (step+1))
     print('silhouette score', silhouette_score(all_embeds, all_ids))
-    plot_embeddings(all_embeds, all_ids)
+    plot_embeddings(all_embeds, all_ids, 'saved_model.png')
 
 
-def plot_embeddings(embeddings, ids, title='T-SNE Plot'):
+def plot_embeddings(embeddings, ids, filename, title='T-SNE Plot'):
     # Per https://scikit-learn.org/stable/modules/generated/sklearn.manifold.TSNE.html
     # reducing dimensionality before running TSNE
     pca = PCA(50)
@@ -185,15 +224,17 @@ def plot_embeddings(embeddings, ids, title='T-SNE Plot'):
     plt.title(title)
     plt.scatter(transformed[:, 0], transformed[:, 1], c=ids)
     plt.legend()
-    plt.show()
+    # plt.show()
+    plt.savefig(path.join(diagram_path, filename))
     plt.close()
 
 
 if __name__ == '__main__':
+    os.makedirs(diagram_path, exist_ok=True)
     # for speaker_id, mel in load_data():
     #     print(speaker_id, mel.shape)
     
-    # m = train(epochs=10)
+    m = train(epochs=10)
     # save_model(m,'speaker/saved_model.pt')
 
-    check_model('speaker/saved_model.pt')
+    # check_model('speaker/saved_model.pt')
