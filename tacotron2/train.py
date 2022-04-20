@@ -10,6 +10,7 @@ import torch.distributed as dist
 from torch.utils.data.distributed import DistributedSampler
 from torch.utils.data import DataLoader
 
+from speaker.model import SpeakerEncoder
 from model import Tacotron2
 from data_utils import TextMelLoader, TextMelCollate
 from loss_function import Tacotron2Loss
@@ -81,6 +82,20 @@ def load_model(hparams):
     return model
 
 
+def load_speaker_model(speaker_model_path):
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    loss_device = torch.device("cpu")
+
+    model = SpeakerEncoder(device, loss_device)
+    speaker_dict = torch.load(speaker_model_path, map_location='cpu')
+    model.load_state_dict(speaker_dict)
+
+    # Freeze the weights of the speaker model
+    for param in model.parameters():
+        param.requires_grad = False
+
+    return model
+
 def warm_start_model(checkpoint_path, model, ignore_layers):
     assert os.path.isfile(checkpoint_path)
     print("Warm starting model from checkpoint '{}'".format(checkpoint_path))
@@ -118,8 +133,8 @@ def save_checkpoint(model, optimizer, learning_rate, iteration, filepath):
                 'learning_rate': learning_rate}, filepath)
 
 
-def validate(model, criterion, valset, iteration, batch_size, n_gpus,
-             collate_fn, logger, distributed_run, rank):
+def validate(model, speaker_model, criterion, valset, iteration, batch_size,
+             n_gpus, collate_fn, logger, distributed_run, rank):
     """Handles all the validation scoring and printing"""
     model.eval()
     with torch.no_grad():
@@ -130,7 +145,8 @@ def validate(model, criterion, valset, iteration, batch_size, n_gpus,
 
         val_loss = 0.0
         for i, batch in enumerate(val_loader):
-            x, y = model.parse_batch(batch)
+            x_mel, x, y = model.parse_batch(batch)
+            speaker_embedding = speaker_model(x_mel)
             y_pred = model(x)
             loss = criterion(y_pred, y)
             if distributed_run:
@@ -146,8 +162,8 @@ def validate(model, criterion, valset, iteration, batch_size, n_gpus,
         logger.log_validation(val_loss, model, y, y_pred, iteration)
 
 
-def train(output_directory, log_directory, checkpoint_path, warm_start, n_gpus,
-          rank, group_name, hparams):
+def train(output_directory, log_directory, checkpoint_path, speaker_model_path,
+          warm_start, n_gpus, rank, group_name, hparams):
     """Training and validation logging results to tensorboard and stdout
 
     Params
@@ -166,6 +182,7 @@ def train(output_directory, log_directory, checkpoint_path, warm_start, n_gpus,
     torch.cuda.manual_seed(hparams.seed)
 
     model = load_model(hparams)
+    speaker_model = load_speaker_model(speaker_model_path)
     learning_rate = hparams.learning_rate
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate,
                                  weight_decay=hparams.weight_decay)
@@ -211,7 +228,8 @@ def train(output_directory, log_directory, checkpoint_path, warm_start, n_gpus,
                 param_group['lr'] = learning_rate
 
             model.zero_grad()
-            x, y = model.parse_batch(batch)
+            x_mel, x, y = model.parse_batch(batch)
+            speaker_embedding = speaker_model(x_mel)
             y_pred = model(x)
 
             loss = criterion(y_pred, y)
@@ -243,7 +261,7 @@ def train(output_directory, log_directory, checkpoint_path, warm_start, n_gpus,
                     reduced_loss, grad_norm, learning_rate, duration, iteration)
 
             if not is_overflow and (iteration % hparams.iters_per_checkpoint == 0):
-                validate(model, criterion, valset, iteration,
+                validate(model, speaker_model, criterion, valset, iteration,
                          hparams.batch_size, n_gpus, collate_fn, logger,
                          hparams.distributed_run, rank)
                 if rank == 0:
@@ -263,6 +281,8 @@ if __name__ == '__main__':
                         help='directory to save tensorboard logs')
     parser.add_argument('-c', '--checkpoint_path', type=str, default=None,
                         required=False, help='checkpoint path')
+    parser.add_argument('-s', '--speaker_model_path', type=str, default=None,
+                        required=True, help='speaker modelspeaker model  path')
     parser.add_argument('--warm_start', action='store_true',
                         help='load model weights only, ignore specified layers')
     parser.add_argument('--n_gpus', type=int, default=1,
@@ -287,4 +307,5 @@ if __name__ == '__main__':
     print("cuDNN Benchmark:", hparams.cudnn_benchmark)
 
     train(args.output_directory, args.log_directory, args.checkpoint_path,
-          args.warm_start, args.n_gpus, args.rank, args.group_name, hparams)
+          args.speaker_model_path, args.warm_start, args.n_gpus, args.rank,
+          args.group_name, hparams)
