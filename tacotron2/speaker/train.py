@@ -19,6 +19,10 @@ from os import path
 import numpy as np
 
 diagram_path = 'diagrams'
+accuracy_path = 'accuracy'
+loss_path = 'loss'
+silhouette_path = 'silhouette'
+tsne_path = 'tsne'
 
 
 def load_data(directory=".", batch_size=4, format='speaker', utter_per_speaker = 4):
@@ -120,43 +124,47 @@ def train(speaker_per_batch=4, utter_per_speaker=4, epochs=2, learning_rate=1e-4
         print('silhouette score', sil_scores[-1])
         print('gender silhouette score', gender_scores[-1])
 
-        plot_embeddings(valid_embeds, valid_ids, f'tsne_e{e + 1}.png', f'T-SNE Plot: Epoch {e + 1}')
+        plot_speaker_embeddings(valid_embeds, valid_ids, f'tsne_e{e + 1}_speaker.png', f'T-SNE Plot: Epoch {e + 1}')
+        plot_random_embeddings(valid_embeds, valid_ids, f'tsne_e{e + 1}_random.png', title=f'T-SNE Plot: Epoch {e + 1}')
+        plot_gender_embeddings(valid_embeds, valid_ids, f'tsne_e{e + 1}_gender.png', f'T-SNE Plot: Epoch {e + 1}')
 
-    plt.figure()
-    plt.title('Silhouette Scores')
-    plt.xlabel('Epoch')
-    plt.ylabel('Silhouette Score')
-    plt.plot(np.arange(epochs) + 1, sil_scores)
-    # plt.show()
-    plt.savefig(path.join(diagram_path, "sil_scores.png"))
-    plt.close()
+        save_model(model, path.join('speaker', f'saved_model_e{e + 1}.pt'))
 
-    plt.figure()
-    plt.title('Silhouette Scores over Gender')
-    plt.xlabel('Epoch')
-    plt.ylabel('Silhouette Score')
-    plt.plot(np.arange(epochs) + 1, gender_scores)
-    # plt.show()
-    plt.savefig(path.join(diagram_path, "gender_scores.png"))
-    plt.close()
+        plt.figure()
+        plt.title('Silhouette Scores')
+        plt.xlabel('Epoch')
+        plt.ylabel('Silhouette Score')
+        plt.plot(np.arange(e + 1) + 1, sil_scores)
+        # plt.show()
+        plt.savefig(path.join(diagram_path, silhouette_path, f'sil_scores_{e + 1}.png'))
+        plt.close()
 
-    plt.figure()
-    plt.title('Validation Loss')
-    plt.xlabel('Epoch')
-    plt.ylabel('Loss')
-    plt.plot(np.arange(epochs) + 1, val_losses)
-    # plt.show()
-    plt.savefig(path.join(diagram_path, "val_losses.png"))
-    plt.close()
+        plt.figure()
+        plt.title('Silhouette Scores over Gender')
+        plt.xlabel('Epoch')
+        plt.ylabel('Silhouette Score')
+        plt.plot(np.arange(e + 1) + 1, gender_scores)
+        # plt.show()
+        plt.savefig(path.join(diagram_path, silhouette_path, f'gender_scores_{e + 1}.png'))
+        plt.close()
 
-    plt.figure()
-    plt.title('Validation Accuracy')
-    plt.xlabel('Epoch')
-    plt.ylabel('Accuracy')
-    plt.plot(np.arange(epochs) + 1, val_accuracy)
-    # plt.show()
-    plt.savefig(path.join(diagram_path, "val_accuracy.png"))
-    plt.close()
+        plt.figure()
+        plt.title('Validation Loss')
+        plt.xlabel('Epoch')
+        plt.ylabel('Loss')
+        plt.plot(np.arange(e + 1) + 1, val_losses)
+        # plt.show()
+        plt.savefig(path.join(diagram_path, loss_path, f'val_losses_{e + 1}.png'))
+        plt.close()
+
+        plt.figure()
+        plt.title('Validation Accuracy')
+        plt.xlabel('Epoch')
+        plt.ylabel('Accuracy')
+        plt.plot(np.arange(e + 1) + 1, val_accuracy)
+        # plt.show()
+        plt.savefig(path.join(diagram_path, accuracy_path, f'val_accuracy_{e + 1}.png'))
+        plt.close()
         
     return model
 
@@ -225,10 +233,12 @@ def check_model(path):
     print('average loss', loss_total / (step+1))
     print('average accuracy', acc_total / (step+1))
     print('silhouette score', silhouette_score(all_embeds, all_ids))
-    plot_embeddings(all_embeds, all_ids, 'saved_model.png')
+    plot_speaker_embeddings(all_embeds, all_ids, path.join(diagram_path, 'tsne_speaker_saved_model.png'))
+    plot_random_embeddings(all_embeds, all_ids, path.join(diagram_path, 'tsne_speaker_saved_model.png'))
+    plot_gender_embeddings(all_embeds, all_ids, path.join(diagram_path, 'tsne_gender_saved_model.png'))
 
 
-def plot_embeddings(embeddings, ids, filename, title='T-SNE Plot'):
+def plot_gender_embeddings(embeddings, ids, filename, title='T-SNE Plot'):
     # Per https://scikit-learn.org/stable/modules/generated/sklearn.manifold.TSNE.html
     # reducing dimensionality before running TSNE
     pca = PCA(50)
@@ -249,16 +259,72 @@ def plot_embeddings(embeddings, ids, filename, title='T-SNE Plot'):
     plt.legend()
     plt.grid()
     # plt.show()
-    plt.savefig(path.join(diagram_path, filename))
+    plt.savefig(path.join(diagram_path, tsne_path, filename))
+    plt.close()
+
+
+def plot_speaker_embeddings(embeddings, ids, filename, title='T-SNE Plot'):
+    # Per https://scikit-learn.org/stable/modules/generated/sklearn.manifold.TSNE.html
+    # reducing dimensionality before running TSNE
+    pca = PCA(50)
+    reduction = pca.fit_transform(embeddings)
+    tsne = TSNE(init='pca', learning_rate='auto')
+    transformed = tsne.fit_transform(reduction)
+
+    ids = ids.astype('int')
+    unique_ids = np.unique(ids)
+
+    plt.figure()
+    plt.title(f'{title} Speakers')
+
+    for speaker_id in unique_ids:
+        speaker_idx = ids == speaker_id
+        plt.scatter(transformed[speaker_idx, 0], transformed[speaker_idx, 1], label=f'Speaker {speaker_id}')
+
+    # plt.legend()
+    plt.grid()
+    # plt.show()
+    plt.savefig(path.join(diagram_path, tsne_path, filename))
+    plt.close()
+
+
+def plot_random_embeddings(embeddings, ids, filename, size=15, title='T-SNE Plot Random'):
+    # Per https://scikit-learn.org/stable/modules/generated/sklearn.manifold.TSNE.html
+    # reducing dimensionality before running TSNE
+    pca = PCA(50)
+    reduction = pca.fit_transform(embeddings)
+    tsne = TSNE(init='pca', learning_rate='auto')
+    transformed = tsne.fit_transform(reduction)
+
+    ids = ids.astype('int')
+    unique_ids = np.unique(ids)
+    random_unique_ids = np.random.choice(ids, size=min(size, unique_ids.size), replace=False)
+
+    plt.figure()
+
+    plt.title(f'{title} - {random_unique_ids.size} Speakers')
+
+    for speaker_id in random_unique_ids:
+        speaker_idx = ids == speaker_id
+        plt.scatter(transformed[speaker_idx, 0], transformed[speaker_idx, 1], label=f'Speaker {speaker_id}')
+
+    # plt.legend()
+    plt.grid()
+    # plt.show()
+    plt.savefig(path.join(diagram_path, tsne_path, filename))
     plt.close()
 
 
 if __name__ == '__main__':
     os.makedirs(diagram_path, exist_ok=True)
+    os.makedirs(path.join(diagram_path, loss_path), exist_ok=True)
+    os.makedirs(path.join(diagram_path, accuracy_path), exist_ok=True)
+    os.makedirs(path.join(diagram_path, tsne_path), exist_ok=True)
+    os.makedirs(path.join(diagram_path, silhouette_path), exist_ok=True)
     # for speaker_id, mel in load_data():
     #     print(speaker_id, mel.shape)
     
-    m = train(epochs=10)
+    m = train(epochs=1000)
     # save_model(m,'speaker/saved_model.pt')
 
     # check_model('speaker/saved_model.pt')
