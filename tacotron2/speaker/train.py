@@ -1,5 +1,3 @@
-# https://github.com/CorentinJ/Real-Time-Voice-Cloning/blob/0713f860a3dd41afb56e83cff84dbdf589d5e11a/encoder/train.py
-
 import torch
 import torchaudio.datasets as datasets
 import torchaudio.transforms as transforms
@@ -25,8 +23,8 @@ silhouette_path = 'silhouette'
 tsne_path = 'tsne'
 
 
-def load_data(directory=".", batch_size=4, format='speaker', utter_per_speaker = 4):
-    dataset = SpeakerMelLoader(datasets.LIBRISPEECH(directory, download=True), format, utter_per_speaker)
+def load_data(directory=".", batch_size=4, format='speaker', utter_per_speaker = 4, mel_type='Tacotron'):
+    dataset = SpeakerMelLoader(datasets.LIBRISPEECH(directory, download=True), format, utter_per_speaker,mel_type=mel_type)
     return torch.utils.data.DataLoader(
         dataset,
         batch_size,
@@ -35,8 +33,8 @@ def load_data(directory=".", batch_size=4, format='speaker', utter_per_speaker =
     )
 
 
-def load_validation(directory=".", batch_size=4, format='speaker', utter_per_speaker = 4):
-    dataset = SpeakerMelLoader(datasets.LIBRISPEECH(directory, "dev-clean",download=True), format, utter_per_speaker)
+def load_validation(directory=".", batch_size=4, format='speaker', utter_per_speaker = 4, mel_type='Tacotron'):
+    dataset = SpeakerMelLoader(datasets.LIBRISPEECH(directory, "dev-clean",download=True), format, utter_per_speaker,mel_type=mel_type)
     return torch.utils.data.DataLoader(
         dataset,
         batch_size,
@@ -47,8 +45,8 @@ def load_validation(directory=".", batch_size=4, format='speaker', utter_per_spe
 
 def train(speaker_per_batch=4, utter_per_speaker=4, epochs=2, learning_rate=1e-4, mel_type='Tacotron'):
     # Init data loader
-    train_loader = load_data(".", speaker_per_batch, 'speaker', utter_per_speaker)
-    valid_loader = load_validation(".", speaker_per_batch, 'speaker', utter_per_speaker)
+    train_loader = load_data(".", speaker_per_batch, 'speaker', utter_per_speaker,mel_type=mel_type)
+    valid_loader = load_validation(".", speaker_per_batch, 'speaker', utter_per_speaker,mel_type=mel_type)
 
     # Device
     # Loss calc may run faster on cpu
@@ -323,8 +321,9 @@ if __name__ == '__main__':
     os.makedirs(path.join(diagram_path, silhouette_path), exist_ok=True)
     # for speaker_id, mel in load_data():
     #     print(speaker_id, mel.shape)
-    
-    m = train(epochs=1000)
-    # save_model(m,'speaker/saved_model.pt')
 
+    # Might make sense to adjust speaker / utterance per batch, e.g. 64/10    
+    m = train(epochs=1000)
+
+    # save_model(m,'speaker/saved_model.pt')
     # check_model('speaker/saved_model.pt')
