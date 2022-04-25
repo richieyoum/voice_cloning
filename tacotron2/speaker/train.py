@@ -231,9 +231,9 @@ def check_model(path):
     print('average loss', loss_total / (step+1))
     print('average accuracy', acc_total / (step+1))
     print('silhouette score', silhouette_score(all_embeds, all_ids))
-    plot_speaker_embeddings(all_embeds, all_ids, path.join(diagram_path, 'tsne_speaker_saved_model.png'))
-    plot_random_embeddings(all_embeds, all_ids, path.join(diagram_path, 'tsne_speaker_saved_model.png'))
-    plot_gender_embeddings(all_embeds, all_ids, path.join(diagram_path, 'tsne_gender_saved_model.png'))
+    plot_speaker_embeddings(all_embeds, all_ids, f'tsne_saved_speaker.png', f'T-SNE Plot')
+    plot_random_embeddings(all_embeds, all_ids, f'tsne_saved_random.png', title=f'T-SNE Plot')
+    plot_gender_embeddings(all_embeds, all_ids, f'tsne_saved_gender.png', f'T-SNE Plot')
 
 
 def plot_gender_embeddings(embeddings, ids, filename, title='T-SNE Plot'):
@@ -323,7 +323,7 @@ if __name__ == '__main__':
     #     print(speaker_id, mel.shape)
 
     # Might make sense to adjust speaker / utterance per batch, e.g. 64/10    
-    m = train(epochs=1000)
+    m = train(epochs=300)
 
     # save_model(m,'speaker/saved_model.pt')
-    # check_model('speaker/saved_model.pt')
+    check_model('speaker/saved_model_e175.pt')
