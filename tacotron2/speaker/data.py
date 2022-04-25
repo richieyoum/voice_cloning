@@ -3,6 +3,7 @@ import torchaudio.datasets as datasets
 import torchaudio.transforms as transforms
 from collections import defaultdict
 import random
+import layers
 
 import warnings
 
@@ -12,11 +13,13 @@ class SpeakerMelLoader(torch.utils.data.Dataset):
     dataset
     """
 
-    def __init__(self, dataset, format='speaker', speaker_utterances=4, mel_length = 100):
+    def __init__(self, dataset, format='speaker', speaker_utterances=4, mel_length = 100, mel_type = 'Tacotron'):
         self.dataset = dataset
         self.set_format(format)
         self.speaker_utterances = speaker_utterances
         self.mel_length = mel_length
+        self.mel_type = mel_type
+        self.mel_generators = dict()
 
     def set_format(self,format):
         self.format = format
@@ -34,13 +37,26 @@ class SpeakerMelLoader(torch.utils.data.Dataset):
         self.speaker_map = speaker_map
         self.speaker_keys = list(speaker_map.keys())
 
-    def get_mel(self, waveform, sampling_rate):
+    def get_mel_gen(self, sampling_rate, channels=80):
+        if (sampling_rate, channels) not in self.mel_generators:
+            if self.mel_type == 'MFCC':
+                mel_gen = transforms.MFCC(sample_rate=sampling_rate, n_mfcc=channels)
+            elif self.mel_type == 'Mel':
+                mel_gen = transforms.MelSpectrogram(sample_rate=sampling_rate, n_mels=channels)
+            elif self.mel_type == 'Tacotron':
+                mel_gen = layers.TacotronSTFT(sampling_rate=sampling_rate,n_mel_channels=channels)
+            else:
+                raise NotImplemented
+            self.mel_generators[(sampling_rate,channels)] = mel_gen
+        return self.mel_generators[(sampling_rate, channels)]
+
+    def get_mel(self, waveform, sampling_rate, channels=80):
         # We previously identified that these warnings were ok.
         with warnings.catch_warnings():
             warnings.filterwarnings('ignore', message=r'At least one mel filterbank has all zero values.*', module=r'torchaudio.*')
             audio = waveform.unsqueeze(0)
             audio = torch.autograd.Variable(audio, requires_grad=False)
-            melspec = transforms.MFCC(sample_rate=sampling_rate)(audio)
+            melspec = self.get_mel_gen(sampling_rate, channels)(audio)
             # melspec is (1,1,channels, time) by default
             # return (time, channels)
             melspec = torch.squeeze(melspec).T

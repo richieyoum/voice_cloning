@@ -45,7 +45,7 @@ def load_validation(directory=".", batch_size=4, format='speaker', utter_per_spe
     )
 
 
-def train(speaker_per_batch=4, utter_per_speaker=4, epochs=2, learning_rate=1e-4):
+def train(speaker_per_batch=4, utter_per_speaker=4, epochs=2, learning_rate=1e-4, mel_type='Tacotron'):
     # Init data loader
     train_loader = load_data(".", speaker_per_batch, 'speaker', utter_per_speaker)
     valid_loader = load_validation(".", speaker_per_batch, 'speaker', utter_per_speaker)

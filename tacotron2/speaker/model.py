@@ -13,9 +13,9 @@ class SpeakerEncoder(nn.Module):
         self.loss_device = loss_device
 
         # lstm block consisting of 3 layers
-        # takes input 40 channel log-mel spectrograms, projected to 256 dimensions
+        # takes input 80 channel log-mel spectrograms, projected to 256 dimensions
         self.lstm = nn.LSTM(
-            input_size=40,
+            input_size=80,
             hidden_size=256,
             num_layers=3,
             batch_first=True,
