@@ -481,6 +481,7 @@ class Tacotron2(nn.Module):
         output_lengths = to_gpu(output_lengths).long()
 
         return (
+            mel_padded,
             (text_padded, input_lengths, mel_padded, max_len, output_lengths),
             (mel_padded, gate_padded))
 
