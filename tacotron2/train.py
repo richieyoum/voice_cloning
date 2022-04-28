@@ -146,8 +146,8 @@ def validate(model, speaker_model, criterion, valset, iteration, batch_size,
         val_loss = 0.0
         for i, batch in enumerate(val_loader):
             x_mel, x, y = model.parse_batch(batch)
-            speaker_embedding = speaker_model(x_mel)
-            y_pred = model(x)
+            speaker_embedding = speaker_model(x_mel.transpose(1, 2))
+            y_pred = model(x, speaker_embedding)
             loss = criterion(y_pred, y)
             if distributed_run:
                 reduced_val_loss = reduce_tensor(loss.data, n_gpus).item()
@@ -229,8 +229,8 @@ def train(output_directory, log_directory, checkpoint_path, speaker_model_path,
 
             model.zero_grad()
             x_mel, x, y = model.parse_batch(batch)
-            speaker_embedding = speaker_model(x_mel)
-            y_pred = model(x)
+            speaker_embedding = speaker_model(x_mel.transpose(1, 2))
+            y_pred = model(x, speaker_embedding)
 
             loss = criterion(y_pred, y)
             if hparams.distributed_run:
