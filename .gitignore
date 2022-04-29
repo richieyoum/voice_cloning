@@ -6,3 +6,4 @@ LibriSpeech/
 LJSpeech-1.1/
 train-clean-100.tar.gz
 dev-clean.tar.gz
+tacotron2/models/
