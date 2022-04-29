@@ -166,15 +166,27 @@ class Encoder(nn.Module):
             convolutions.append(conv_layer)
         self.convolutions = nn.ModuleList(convolutions)
 
-        self.lstm = nn.LSTM(hparams.encoder_embedding_dim,
+        self.lstm = nn.LSTM(hparams.encoder_embedding_dim + hparams.speaker_embedding_dim,
                             int(hparams.encoder_embedding_dim / 2), 1,
                             batch_first=True, bidirectional=True)
 
-    def forward(self, x, input_lengths):
+    def forward(self, x, input_lengths, speaker_embedding):
         for conv in self.convolutions:
             x = F.dropout(F.relu(conv(x)), 0.5, self.training)
 
         x = x.transpose(1, 2)
+
+        # this concatenation part is largely from https://github.com/CorentinJ/Real-Time-Voice-Cloning
+        batch_size = x.size()[0]
+        num_chars = x.size()[1]
+        idx = 0 if speaker_embedding.dim() == 1 else 1
+        speaker_embedding_size = speaker_embedding.size()[idx] 
+        e = speaker_embedding.repeat_interleave(num_chars, dim=idx)
+        # Reshape & transpose
+        e = e.reshape(batch_size, speaker_embedding_size, num_chars)
+        e = e.transpose(1, 2)
+        # Concatenate the tiled speaker embedding with the encoder output
+        x = torch.cat((x, e), 2)
 
         # pytorch tensor are not reversible, hence the conversion
         input_lengths = input_lengths.cpu().numpy()
@@ -186,14 +198,23 @@ class Encoder(nn.Module):
 
         outputs, _ = nn.utils.rnn.pad_packed_sequence(
             outputs, batch_first=True)
-
         return outputs
 
-    def inference(self, x):
+    def inference(self, x, speaker_embedding=None):
         for conv in self.convolutions:
             x = F.dropout(F.relu(conv(x)), 0.5, self.training)
 
         x = x.transpose(1, 2)
+
+        if speaker_embedding is not None:
+            batch_size = x.size()[0]
+            num_chars = x.size()[1]
+            idx = 0 if speaker_embedding.dim() == 1 else 1
+            speaker_embedding_size = speaker_embedding.size()[idx] 
+            e = speaker_embedding.repeat_interleave(num_chars, dim=idx)
+            e = e.reshape(batch_size, speaker_embedding_size, num_chars)
+            e = e.transpose(1, 2)
+            x = torch.cat((x, e), 2)
 
         self.lstm.flatten_parameters()
         outputs, _ = self.lstm(x)
@@ -392,7 +413,6 @@ class Decoder(nn.Module):
         gate_outputs: gate outputs from the decoder
         alignments: sequence of attention weights from the decoder
         """
-
         decoder_input = self.get_go_frame(memory).unsqueeze(0)
         decoder_inputs = self.parse_decoder_inputs(decoder_inputs)
         decoder_inputs = torch.cat((decoder_input, decoder_inputs), dim=0)
@@ -497,18 +517,19 @@ class Tacotron2(nn.Module):
 
         return outputs
 
-    def forward(self, inputs):
+    def forward(self, inputs, speaker_embedding):
         text_inputs, text_lengths, mels, max_len, output_lengths = inputs
         text_lengths, output_lengths = text_lengths.data, output_lengths.data
 
         embedded_inputs = self.embedding(text_inputs).transpose(1, 2)
 
-        encoder_outputs = self.encoder(embedded_inputs, text_lengths)
+        encoder_outputs = self.encoder(embedded_inputs, text_lengths, speaker_embedding)
 
         mel_outputs, gate_outputs, alignments = self.decoder(
             encoder_outputs, mels, memory_lengths=text_lengths)
 
         mel_outputs_postnet = self.postnet(mel_outputs)
+
         mel_outputs_postnet = mel_outputs + mel_outputs_postnet
 
         return self.parse_output(
