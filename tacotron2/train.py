@@ -10,6 +10,9 @@ import torch.distributed as dist
 from torch.utils.data.distributed import DistributedSampler
 from torch.utils.data import DataLoader
 
+import torchaudio.datasets as datasets
+from torch.utils.data import Subset
+from sklearn import model_selection
 from speaker.model import SpeakerEncoder
 from model import Tacotron2
 from data_utils import TextMelLoader, TextMelCollate
@@ -42,8 +45,12 @@ def init_distributed(hparams, n_gpus, rank, group_name):
 
 def prepare_dataloaders(hparams):
     # Get data, data loaders and collate function ready
-    trainset = TextMelLoader(hparams.training_files, hparams)
-    valset = TextMelLoader(hparams.validation_files, hparams)
+    dataset = TextMelLoader(datasets.LIBRISPEECH(".", download=True), hparams)
+    train_idx, val_idx = \
+        model_selection.train_test_split(list(range(len(dataset))),
+                                         test_size=0.1)
+    trainset = Subset(dataset, train_idx)
+    valset = Subset(dataset, val_idx)
     collate_fn = TextMelCollate(hparams.n_frames_per_step)
 
     if hparams.distributed_run:
