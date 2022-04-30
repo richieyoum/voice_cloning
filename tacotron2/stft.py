@@ -76,7 +76,7 @@ class STFT(torch.nn.Module):
 
     def transform(self, input_data):
         num_batches = input_data.size(0)
-        num_samples = input_data.size(1)
+        num_samples = input_data.size(-1)
 
         self.num_samples = num_samples
 
