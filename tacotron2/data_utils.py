@@ -79,6 +79,8 @@ class TextMelCollate():
         mel_padded.zero_()
         gate_padded = torch.FloatTensor(len(batch), max_target_len)
         gate_padded.zero_()
+        mel_speaker = torch.FloatTensor(len(batch),num_mels,128)
+        mel_speaker.zero_()
         output_lengths = torch.LongTensor(len(batch))
         for i in range(len(ids_sorted_decreasing)):
             mel = batch[ids_sorted_decreasing[i]][1]
@@ -86,5 +88,12 @@ class TextMelCollate():
             gate_padded[i, mel.size(1) - 1:] = 1
             output_lengths[i] = mel.size(1)
 
+            if mel.shape[1] <= 128:
+                mel_slice = mel
+            else:
+                slice_start = random.randint(0,mel.shape[1]-128)
+                mel_slice = mel[:,slice_start:slice_start+128]
+            mel_speaker[i,:,:mel_slice.shape[1]] = mel_slice
+
         return text_padded, input_lengths, mel_padded, gate_padded, \
-            output_lengths
+            output_lengths, mel_speaker
